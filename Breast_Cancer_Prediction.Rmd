@@ -1,0 +1,110 @@
+---
+title: "Breast Cancer Prediction using Support Vector Machines and Neural Networks"
+author: "Ratan Madankumar Singh"
+date: "31 December 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This files contains a basic analysis of classification of a tumor into Malign and Benign. This dataset is taken from <https://kaggle.com>.This Dataset contains 569 observation with 31 different attributes. With this data we are aiming to train a machine learning model which would predict the class of the tumor. Since we have a single dataset, therefore we are splitting our dataset into three datasets namely *trainData*, *cvData* and *testData*. We will be demonstrating the effect of two algorithms *Support Vector Machines* and *Neural Networks*. It is always said that it is data that performs better not the algorithm. We will observe that the even though neural network being non-linear and more complex simply cant perform much better than Support Vector machines. This is one of the fundamental reasons that SVM was more popular than neural networks.
+I am performing analysis on dataset stored on my local machine and assuming all the features are relevant and not performing any filtering on them. Before processing the data, lets split them into three datasets as mentioned above. One thing that should be noted that the *diagnosis* which is our target variable is a character which needs to be converted into a numeric target vector.
+
+```{r loading dataset}
+Data <- read.csv("C:/Users/Ratan Singh/Desktop/R Markdown Files/Breast Cancer Prediction/data.csv", header = TRUE,stringsAsFactors = FALSE)
+
+summary(Data)
+
+Data[which(Data$diagnosis == "M"),]$diagnosis <- 1
+Data[which(Data$diagnosis == "B"),]$diagnosis <- 0
+Data <- apply(Data,2,as.numeric)
+
+set.seed(1)
+Data <- Data[order(sample(1:nrow(Data),nrow(Data))),]
+print(dim(Data))
+```
+
+## Splitting Data
+
+I am splitting data into 1:300 for training , 301:400 for cross validation and remaining for the test dataset. This distribution is chosen randomly and it depends completely on reader to set limit for them.
+
+```{r splitting dataset}
+trainData <- Data[1:300,]
+validationData <- Data[301:400,]
+testData <- Data[401:569,]
+
+validationData_Y <- validationData[,1]
+validationData_X <- validationData[,-1]
+
+testData_Y <- testData[,1]
+testData_X <- testData[,-1]
+```
+
+Let's try to fit a linear classifier using SVM. Before fitting SVM, let's design a formula using R code as the number of variables is very large. This method works particularly for those algorithms which require a formula object and cant be avoides using method *y ~ .* 
+
+```{r model training for SVM}
+
+attributeName <- colnames(Data)[-1]
+form <- as.formula(paste("diagnosis ~ ",paste(attributeName,collapse = "+")))
+
+require(e1071)
+svmClassifierModel <- svm(form, data = trainData)
+summary(svmClassifierModel)
+predicted_output_prob_cv <- predict(svmClassifierModel,newdata = validationData_X)
+predicted_output_cv <- as.numeric(predicted_output_prob_cv >= 0.5)
+print(table(predicted_output_cv,validationData_Y))
+print(mean(predicted_output_cv == validationData_Y))
+
+```
+Training of neural networks requires two things in specific: *(1.) All attributes and targest should be numeric (2.) All attributes should be between 0 and 1 (i.e. normalized)* So before training the neural network, we take a copy of original data and normalize it to a common scale and center. After normalizing the data, we again split the dataset as mentioned above. 
+
+```{r model training for the Neural networks}
+
+require(neuralnet)
+normalData <- Data
+max_data <- apply(Data,2,max)
+min_data <- apply(Data,2,min)
+
+normalData <- as.data.frame(scale(normalData,center = min_data,scale = (max_data - min_data)))
+
+normalTrainData <- normalData[1:300,]
+normalValidationData <- normalData[301:400,]
+normalTestData <- normalData[401:569,]
+
+normalValidationData_Y <- normalValidationData[,1]
+normalValidationData_X <- normalValidationData[,-1]
+
+normalTestData_Y <- normalTestData[,1]
+normalTestData_X <- normalTestData[,-1]
+
+nnetModel <- neuralnet(formula = form , data = normalTrainData,hidden = c(7,5,1), linear.output = FALSE)
+neuralnetProbCV <- compute(nnetModel,normalValidationData_X)$net.result
+neuralnetCV <- as.numeric(neuralnetProbCV >= 0.5)
+print(mean(neuralnetCV == normalValidationData_Y))
+
+neuralnetProbTest <- compute(nnetModel,normalTestData_X)$net.result
+neuralnetTest <- as.numeric(neuralnetProbTest >= 0.5)
+print(table(neuralnetTest,normalTestData_Y))
+print(mean(neuralnetTest == normalTestData_Y))
+```
+Now we have seen the prediction of both algorithms over the cross validation dataset. Let's fit the model over the test dataset. After prediction, the confusion matrix and accuracy, which is same for both of the algorithms.
+
+```{r predicting over the test data}
+
+predicted_output_prob_test <- predict(svmClassifierModel,newdata = testData_X)
+predicted_output_test <- as.numeric(predicted_output_prob_test >= 0.5)
+print(table(predicted_output_test,testData_Y))
+print(mean(predicted_output_test == testData_Y))
+
+NNoutput_prob_test <- compute(nnetModel,normalTestData_X)$net.result
+NNoutput_test <- as.numeric(NNoutput_prob_test >= 0.5)
+print(table(NNoutput_test,testData_Y))
+print(mean(NNoutput_test == testData_Y))
+
+```
+
+Hence the accuracy of a machine learning system depends more on data and less on the learning algorithm.
